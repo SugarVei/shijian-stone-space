@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+.desktop-app/
+.packaging-cache/
+.qa/
+.openai/
+*.log
+*.zip
+.env
+.env.*
+!.env.example

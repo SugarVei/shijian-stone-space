@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>石间 · 磁盘分类 3D 热力图</title>
+<script>
+// All disk figures live here. Replace only DATA when integrating a future scan.
+const DATA = {
+  categories: [
+    { key: 'user', color: '#83958C', label: '用户文件' },
+    { key: 'system', color: '#9BA6AC', label: '系统' },
+    { key: 'apps', color: '#B8AA94', label: '应用' },
+    { key: 'data', color: '#A39DAA', label: '系统数据' },
+    { key: 'other', color: '#B8BAB5', label: '其他' }
+  ],
+  disks: [
+    { id: 'C:', name: '系统盘', totalGB: 512, usedGB: 356, freeGB: 156, values: [123, 111, 63, 41.5, 17.5] },
+    { id: 'D:', name: '工作盘', totalGB: 1024, usedGB: 640, freeGB: 384, values: [280, 64, 160, 96, 40] },
+    { id: 'F:', name: '资料盘', totalGB: 512, usedGB: 180, freeGB: 332, values: [76, 58, 24, 16, 6] }
+  ]
+};
+function validateData(data) {
+  if (!data || !Array.isArray(data.categories) || data.categories.length !== 5 || !Array.isArray(data.disks) || data.disks.length !== 3) throw new Error('DATA 必须包含 5 个分类、3 块磁盘。');
+  if (new Set(data.categories.map(c => c.key)).size !== data.categories.length || new Set(data.disks.map(d => d.id)).size !== data.disks.length) throw new Error('分类或磁盘标识重复。');
+  for (const disk of data.disks) {
+    if (!Array.isArray(disk.values) || disk.values.length !== data.categories.length || [...disk.values, disk.totalGB, disk.usedGB, disk.freeGB].some(v => !Number.isFinite(v) || v < 0) || disk.totalGB <= 0) throw new Error(`${disk.id} 数据格式不正确。`);
+    const sum = disk.values.reduce((a, b) => a + b, 0);
+    if (Math.abs(sum - disk.usedGB) > 1e-9) throw new Error(`${disk.id} 分类合计 ${sum} GB 不等于已用 ${disk.usedGB} GB。`);
+    if (Math.abs(disk.usedGB + disk.freeGB - disk.totalGB) > 1e-9) throw new Error(`${disk.id} 已用与可用之和不等于总容量。`);
+  }
+  return true;
+}
+try { validateData(DATA); window.DATA_VALID = true; } catch (error) { window.DATA_ERROR = error.message; }
+</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff;color:#20272b;font-family:'Segoe UI','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}button{font:inherit;cursor:pointer;color:inherit}button:focus-visible{outline:2px solid #b54b42;outline-offset:3px}button{touch-action:manipulation}.card{height:100%;width:100%;display:flex;flex-direction:column;overflow:hidden;border:1px solid #e7e8e9;border-radius:25px;background:#fff;position:relative}.card-header{padding:23px 25px 12px;display:flex;gap:20px;justify-content:space-between;align-items:flex-start;flex-shrink:0}.card-title h2{font-size:22px;letter-spacing:-.7px;font-weight:600;margin:0 0 5px;white-space:nowrap}.card-title p{font-size:11px;color:#a1a7aa;margin:0}.toolbar{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.segmented{display:flex;align-items:center;gap:3px;padding:4px;background:#f4f4f3;border:1px solid #ececeb;border-radius:10px}.segmented button{background:none;border:0;padding:7px 11px;border-radius:7px;white-space:nowrap;font-size:11px;color:#8e9497;min-height:29px;transition:background .2s,color .2s,box-shadow .2s}.segmented button[aria-pressed=true]{background:#fff;color:#3d4549;box-shadow:0 1px 4px #242d3312}.chart-meta{display:flex;justify-content:space-between;align-items:center;padding:0 26px 8px;gap:15px;font-size:10px;flex-shrink:0}.metric-caption{color:#9ca2a5;letter-spacing:.1px}.legend{display:flex;align-items:center;gap:8px;color:#91989c;font-size:10px}.legend-gradient{width:91px;height:7px;border-radius:3px;background:linear-gradient(90deg,#e8e8e8,#d92d20)}.stage{min-height:180px;position:relative;flex:1;overflow:hidden;background:#fff;isolation:isolate}.stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;outline:none}.stage canvas:active{cursor:grabbing}.axis-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}.axis-label{position:absolute;transform:translate(-50%,-50%);color:#8c9498;font-size:11px;line-height:1.35;text-align:center;white-space:nowrap;padding:2px 3px;border-radius:4px;background:#ffffffc7;pointer-events:none}.axis-label.disk{font-size:10px;color:#777f83}.axis-label.active{color:#4b5859;font-weight:600}.tip{position:absolute;z-index:5;padding:10px 12px;border:1px solid #e6e9e7;border-radius:9px;background:#fffffff2;backdrop-filter:blur(12px);box-shadow:0 5px 20px #27313812;font-size:11px;pointer-events:none;max-width:230px}.tip strong{display:block;font-size:12px;font-weight:600;margin-bottom:4px}.tip span{color:#a74d43}.detail{position:absolute;top:14px;left:20px;z-index:6;width:246px;background:#fffffff2;backdrop-filter:blur(22px);border:1px solid #e7e8e4;border-radius:16px;box-shadow:0 8px 35px #29332313;padding:17px 18px 14px}.detail[hidden],.tip[hidden],.stage-status[hidden]{display:none}.detail-heading{display:flex;gap:8px;align-items:center;justify-content:space-between}.detail-heading h3{font-size:12px;font-weight:550;color:#747d81;margin:0}.close-detail{border:0;background:none;font-size:19px;line-height:1;color:#9ba2a4;padding:0 0 0 7px}.detail-value{font-size:32px;font-weight:600;letter-spacing:-1px;margin:10px 0 15px}.detail-value small{font-size:13px;font-weight:400;color:#a0a6a8;letter-spacing:0;margin-left:5px}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px 10px}.detail-grid dt{font-size:9px;color:#a1a8aa;margin-bottom:4px}.detail-grid dd{font-size:14px;font-weight:550;margin:0;color:#525d62;font-variant-numeric:tabular-nums}.detail-grid dd.history{color:#b4babc}.reset-view{width:100%;margin-top:16px;border:1px solid #e9eae7;background:#f8f9f6;border-radius:8px;padding:7px 12px;font-size:10px;color:#798878}.detail-history{margin:12px 0 0;color:#b0b5b7;font-size:9px}.stage-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:25px;text-align:center;z-index:8;background:#ffffffdf;font-size:12px;color:#9ca5a4;line-height:1.9}.stage-status.error{color:#ad5147;background:#fff8f5f2}.statistics{display:grid;grid-template-columns:1fr 1fr 1fr;margin:8px 26px 0;padding:18px 0 17px;border-top:1px solid #eceeeb;flex-shrink:0}.stat{padding-left:23px;border-left:1px solid #eceeeb;min-width:0}.stat:first-child{padding-left:0;border:0}.stat-value{font-size:30px;line-height:1.05;font-weight:600;letter-spacing:-1px;font-variant-numeric:tabular-nums}.stat-value small{font-size:12px;color:#a8adaf;letter-spacing:0;margin-left:5px;font-weight:400}.stat-label{font-size:10px;color:#a2a9ac;margin-top:8px;line-height:1.5}.gesture-hint{text-align:center;font-size:9px;letter-spacing:.1px;color:#b2b8ba;margin:0;padding:0 15px 14px;flex-shrink:0}.a11y-bars{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}.a11y-bars:focus-within{left:18px;bottom:18px;z-index:10;width:250px;height:150px;overflow:auto;background:white;border:1px solid #ddd;border-radius:10px;padding:10px}.a11y-bars button{display:block;border:0;background:white;font-size:12px;padding:5px}.viewing .tip{display:none}
+@media(max-width:700px){.card-header{padding:19px 18px 11px;gap:12px;flex-wrap:wrap}.card-title h2{font-size:20px}.toolbar{gap:7px;justify-content:flex-start}.segmented{padding:3px;border-radius:8px}.segmented button{padding:6px 8px;font-size:10px}.chart-meta{padding:0 19px 8px}.legend-gradient{width:65px}.statistics{margin-left:19px;margin-right:19px;padding:16px 0 14px}.stat{padding-left:13px}.stat-value{font-size:25px}.stat-value small{font-size:10px;margin-left:3px}.stat-label{font-size:9px}.detail{width:220px;top:12px;left:15px;padding:15px}.detail-value{font-size:28px}.axis-label{font-size:9px;width:31px;white-space:pre-line;padding:1px 0;background:#ffffffd9}.axis-label.disk{font-size:9px;width:45px}.gesture-hint{font-size:8px;line-height:1.6;padding-bottom:12px}.stage{min-height:235px}}
+@media(prefers-reduced-motion:reduce){.segmented button{transition:none}}
+</style>
+</head>
+<body>
+<section class="card" aria-label="磁盘分类 3D 柱状热力图">
+  <header class="card-header"><div class="card-title"><h2>空间的形状</h2><p>磁盘 × 文件分类</p></div><div class="toolbar">
+    <div class="segmented" aria-label="视角"><button id="perspective" aria-pressed="true">Perspective</button><button id="top-view" aria-pressed="false">Top view</button></div>
+    <div class="segmented" aria-label="指标"><button id="metric-gb" aria-pressed="true">已用空间（GB）</button><button id="metric-percent" aria-pressed="false">占该盘比例（%）</button></div>
+  </div></header>
+  <div class="chart-meta"><span class="metric-caption" id="metric-caption">已用空间 · GB</span><div class="legend"><span>Fewer</span><i class="legend-gradient"></i><span>More</span></div></div>
+  <div class="stage" id="stage">
+    <div class="axis-layer" id="axis-layer"></div><div class="tip" id="tooltip" hidden></div>
+    <article class="detail" id="detail" aria-label="分类详情" hidden><div class="detail-heading"><h3 id="detail-name"></h3><button class="close-detail" id="close-detail" aria-label="关闭详情">×</button></div><div class="detail-value"><span id="detail-gb"></span><small>GB</small></div><dl class="detail-grid"><div><dt>占该盘容量</dt><dd id="detail-disk-percent"></dd></div><div><dt>占全部已用</dt><dd id="detail-total-percent"></dd></div><div><dt>上周对比</dt><dd class="history">—</dd></div><div><dt>变化</dt><dd class="history">—</dd></div></dl><p class="detail-history">未提供历史数据</p><button class="reset-view" id="reset-view">Reset view</button></article>
+    <div class="stage-status" id="stage-status" role="status">正在加载 3D 图形</div><div class="stage-status" id="no-results" hidden>没有匹配的磁盘或分类</div>
+    <div class="a11y-bars" id="a11y-bars" aria-label="可用键盘选择的 15 个分类柱"></div>
+  </div>
+  <footer class="statistics"><div class="stat"><div class="stat-value"><span id="total-used"></span><small>GB</small></div><div class="stat-label">已用总计</div></div><div class="stat"><div class="stat-value" id="fullest-percent"></div><div class="stat-label" id="fullest-label"></div></div><div class="stat"><div class="stat-value"><span id="largest-value"></span><small>GB</small></div><div class="stat-label" id="largest-label"></div></div></footer>
+  <p class="gesture-hint">Drag to orbit, pinch to zoom, click a bar to fly in.</p>
+</section>
+<script>
+const numberFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+const fmt = value => numberFormat.format(value);
+const totalUsed = window.DATA_VALID ? DATA.disks.reduce((sum, disk) => sum + disk.usedGB, 0) : 0;
+const allCells = window.DATA_VALID ? DATA.disks.flatMap((disk, row) => DATA.categories.map((category, column) => ({ id: `${disk.id}-${category.key}`, disk, category, row, column, gb: disk.values[column], diskPercent: disk.values[column] / disk.totalGB * 100, totalPercent: disk.values[column] / totalUsed * 100 }))) : [];
+const fullest = window.DATA_VALID ? DATA.disks.reduce((a, b) => a.usedGB / a.totalGB > b.usedGB / b.totalGB ? a : b) : null;
+const largest = window.DATA_VALID ? allCells.reduce((a, b) => a.gb > b.gb ? a : b) : null;
+if(window.DATA_VALID) {
+document.getElementById('total-used').textContent = fmt(totalUsed);
+document.getElementById('fullest-percent').textContent = (fullest.usedGB / fullest.totalGB * 100).toFixed(1) + '%';
+document.getElementById('fullest-label').textContent = `最满磁盘 · ${fullest.id.replace(':', '')} 盘`;
+document.getElementById('largest-value').textContent = fmt(largest.gb);
+document.getElementById('largest-label').textContent = `最大单项 · ${largest.disk.id.replace(':', '')} 盘·${largest.category.label}`;
+} else { document.querySelector('.statistics').style.display='none';document.querySelector('.toolbar').style.display='none'; }
+function sendData() { if (window.parent !== window && window.DATA_VALID) window.parent.postMessage({type:'disk-heatmap:ready',data:DATA},'*'); }
+window.addEventListener('message', event => { if (event.source === window.parent && event.data?.type === 'disk-heatmap:init') sendData(); });
+sendData();
+if (!window.DATA_VALID) { const status=document.getElementById('stage-status');status.classList.add('error');status.setAttribute('role','alert');status.textContent='数据校验失败：'+window.DATA_ERROR; }
+</script>
+<script type="module">
+async function boot() {
+  const [THREE, { OrbitControls }] = await Promise.all([import('three'), import('three/addons/controls/OrbitControls.js')]);
+  const stage=document.getElementById('stage'),axisLayer=document.getElementById('axis-layer'),tooltip=document.getElementById('tooltip');
+  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));renderer.setClearColor('#ffffff');renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.domElement.setAttribute('aria-label','可拖动旋转和缩放的磁盘分类三维图');renderer.domElement.tabIndex=0;stage.prepend(renderer.domElement);
+  const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(34,1,.1,150);
+  const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.085;controls.enablePan=false;controls.minDistance=4;controls.maxDistance=45;controls.minPolarAngle=.0001;controls.maxPolarAngle=Math.PI*.47;controls.zoomSpeed=.85;controls.rotateSpeed=.65;controls.touches.ONE=THREE.TOUCH.ROTATE;controls.touches.TWO=THREE.TOUCH.DOLLY_PAN;
+  scene.add(new THREE.AmbientLight('#ffffff',1.7));const sun=new THREE.DirectionalLight('#fff8f2',2.3);sun.position.set(-5,12,7);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-8;sun.shadow.camera.right=8;sun.shadow.camera.top=8;sun.shadow.camera.bottom=-8;sun.shadow.normalBias=.025;sun.shadow.bias=-.0004;scene.add(sun);
+  const fill=new THREE.DirectionalLight('#f1f4ff',1.1);fill.position.set(6,7,-7);scene.add(fill);
+  const STEP_X=1.85,STEP_Z=1.4,MAX_HEIGHT=3.7;
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(STEP_X*5,STEP_Z*3),new THREE.MeshStandardMaterial({color:'#f7f7f5',roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.y=-.025;floor.receiveShadow=true;scene.add(floor);
+  const gridPoints=[];for(let i=0;i<=5;i++){const x=(i-2.5)*STEP_X;gridPoints.push(new THREE.Vector3(x,.002,-STEP_Z*1.5),new THREE.Vector3(x,.002,STEP_Z*1.5));}for(let i=0;i<=3;i++){const z=(i-1.5)*STEP_Z;gridPoints.push(new THREE.Vector3(-STEP_X*2.5,.002,z),new THREE.Vector3(STEP_X*2.5,.002,z));}
+  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPoints),new THREE.LineBasicMaterial({color:'#e5e7e5',transparent:true,opacity:.8})));
+  const geometry=new THREE.BoxGeometry(1.34,1,1.34);geometry.translate(0,.5,0);const edgeGeometry=new THREE.EdgesGeometry(geometry);
+  let view='perspective',metric='gb',selected=null,hovered=null,query='',activeDisk='C:',cameraTween=null,metricTween=null,width=1,height=1,dirty=true;
+  const reduced=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const bars=allCells.map(cell=>{
+    const group=new THREE.Group();group.position.set((cell.column-2)*STEP_X,0,(cell.row-1)*STEP_Z);
+    const material=new THREE.MeshStandardMaterial({color:'#e8e8e8',roughness:.5,metalness:.03});const mesh=new THREE.Mesh(geometry,material);mesh.castShadow=true;mesh.receiveShadow=true;mesh.userData.id=cell.id;group.add(mesh);
+    const edge=new THREE.LineSegments(edgeGeometry,new THREE.LineBasicMaterial({color:'#b52b20',transparent:true,opacity:0}));group.add(edge);scene.add(group);
+    return {...cell,group,mesh,edge,targetHeight:1};
+  });
+  const labels=[];
+  function label(text,position,type,key){const element=document.createElement('span');element.className='axis-label '+type;element.dataset.labelKey=key;element.textContent=text;axisLayer.append(element);labels.push({element,position,type,key,text});}
+  DATA.categories.forEach((category,column)=>label(category.label,new THREE.Vector3((column-2)*STEP_X,0,STEP_Z*1.5+.6),'category',category.key));
+  DATA.disks.forEach((disk,row)=>label(`${disk.id} ${disk.name}`,new THREE.Vector3(-STEP_X*2.5-.65,0,(row-1)*STEP_Z),'disk',disk.id));
+  function colorFor(value,max){const t=max?Math.min(1,Math.max(0,value/max)):0;const a=[232,232,232],b=[217,45,32];return new THREE.Color('#'+a.map((v,i)=>Math.round(v+(b[i]-v)*t).toString(16).padStart(2,'0')).join(''));}
+  function targetFor(bar){return metric==='gb'?bar.gb:bar.diskPercent;}
+  function updateMetric(next,immediate=false){
+    metric=next;const max=Math.max(...bars.map(targetFor));const start=performance.now();
+    metricTween={start,duration:immediate||reduced?0:740,values:bars.map(bar=>({bar,fromHeight:bar.group.scale.y,toHeight:Math.max(.055,targetFor(bar)/max*MAX_HEIGHT),fromColor:bar.mesh.material.color.clone(),toColor:colorFor(targetFor(bar),max)}))};
+    document.getElementById('metric-gb').setAttribute('aria-pressed',String(metric==='gb'));document.getElementById('metric-percent').setAttribute('aria-pressed',String(metric==='percent'));document.getElementById('metric-caption').textContent=metric==='gb'?'已用空间 · GB':'占各盘总容量 · %';dirty=true;
+  }
+  function fittingPosition(which){
+    const target=new THREE.Vector3(0,1.3,0),direction=(which==='top'?new THREE.Vector3(0,1,.0001):new THREE.Vector3(2.5,20,9)).normalize();
+    const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),direction).normalize(),up=new THREE.Vector3().crossVectors(direction,right).normalize(),tan=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));let distance=0;
+    const points=labels.map(item=>item.position.clone());
+    for(const x of [-STEP_X*2.5,STEP_X*2.5])for(const z of [-STEP_Z*1.5,STEP_Z*1.5])points.push(new THREE.Vector3(x,0,z));
+    const maxGB=Math.max(...bars.map(b=>b.gb)),maxPercent=Math.max(...bars.map(b=>b.diskPercent));
+    for(const bar of bars)for(const dx of [-.67,.67])for(const dz of [-.67,.67])for(const y of [0,Math.max(bar.gb/maxGB,bar.diskPercent/maxPercent)*MAX_HEIGHT])points.push(new THREE.Vector3(bar.group.position.x+dx,y,bar.group.position.z+dz));
+    // Center the projected chart bounds before fitting, so empty headroom does not shrink the bars.
+    const horizontal=points.map(point=>point.clone().sub(target).dot(right)),vertical=points.map(point=>point.clone().sub(target).dot(up));
+    target.addScaledVector(right,(Math.min(...horizontal)+Math.max(...horizontal))/2).addScaledVector(up,(Math.min(...vertical)+Math.max(...vertical))/2);
+    for(const point of points){const rel=point.clone().sub(target);distance=Math.max(distance,rel.dot(direction)+Math.abs(rel.dot(right))/(tan*camera.aspect),rel.dot(direction)+Math.abs(rel.dot(up))/tan);}
+    return {target,position:target.clone().addScaledVector(direction,distance*1.035)};
+  }
+  function fly(position,target,duration=800){
+    controls.enableDamping=false;controls.update();controls.enableDamping=true;cameraTween={start:performance.now(),duration:reduced?0:duration,fromPosition:camera.position.clone(),toPosition:position.clone(),fromTarget:controls.target.clone(),toTarget:target.clone()};controls.enabled=false;dirty=true;
+  }
+  function setView(next,immediate=false){view=next;const fit=fittingPosition(view);document.getElementById('perspective').setAttribute('aria-pressed',String(view==='perspective'));document.getElementById('top-view').setAttribute('aria-pressed',String(view==='top'));if(immediate){camera.position.copy(fit.position);controls.target.copy(fit.target);controls.update();}else fly(fit.position,fit.target);}
+  function styling(){for(const bar of bars){const match=!query||`${bar.disk.id} ${bar.disk.name} ${bar.category.label}`.toLowerCase().includes(query.toLowerCase());bar.mesh.material.transparent=!match;bar.mesh.material.opacity=match?1:.13;bar.mesh.material.emissive.set(bar.id===selected?'#3b0601':bar.id===hovered?'#160401':'#000000');bar.edge.material.opacity=bar.id===selected?1:bar.id===hovered ? .55 : 0;}labels.forEach(label=>label.element.classList.toggle('active',label.type==='disk'&&label.key===activeDisk));document.getElementById('no-results').hidden=!query||bars.some(bar=>`${bar.disk.id} ${bar.disk.name} ${bar.category.label}`.toLowerCase().includes(query.toLowerCase()));dirty=true;}
+  function select(bar){
+    selected=bar.id;activeDisk=bar.disk.id;styling();tooltip.hidden=true;
+    document.getElementById('detail-name').textContent=`${bar.disk.id} ${bar.disk.name} · ${bar.category.label}`;document.getElementById('detail-gb').textContent=fmt(bar.gb);document.getElementById('detail-disk-percent').textContent=bar.diskPercent.toFixed(2)+'%';document.getElementById('detail-total-percent').textContent=bar.totalPercent.toFixed(2)+'%';document.getElementById('detail').hidden=false;
+    const target=new THREE.Vector3(bar.group.position.x,bar.group.scale.y*.45,bar.group.position.z),direction=camera.position.clone().sub(controls.target).normalize();fly(target.clone().addScaledVector(direction,Math.max(7.5,bar.group.scale.y*2.15)),target,740);
+    if(window.parent!==window)window.parent.postMessage({type:'disk-heatmap:select',selection:{diskId:bar.disk.id,categoryKey:bar.category.key}},'*');
+  }
+  function reset(){selected=null;hovered=null;document.getElementById('detail').hidden=true;styling();setView('perspective');}
+  document.getElementById('perspective').onclick=()=>setView('perspective');document.getElementById('top-view').onclick=()=>setView('top');document.getElementById('metric-gb').onclick=()=>updateMetric('gb');document.getElementById('metric-percent').onclick=()=>updateMetric('percent');document.getElementById('reset-view').onclick=reset;document.getElementById('close-detail').onclick=()=>{selected=null;document.getElementById('detail').hidden=true;styling();};
+  bars.forEach(bar=>{const button=document.createElement('button');button.textContent=`${bar.disk.id} ${bar.category.label} ${fmt(bar.gb)} GB`;button.onclick=()=>select(bar);document.getElementById('a11y-bars').append(button);});
+  const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),activePointers=new Set();let down=null,moved=false,lastTooltip={x:0,y:0};
+  function hit(event){const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const result=raycaster.intersectObjects(bars.map(bar=>bar.mesh),false)[0];return result?bars.find(bar=>bar.id===result.object.userData.id):null;}
+  renderer.domElement.addEventListener('pointerdown',event=>{activePointers.add(event.pointerId);if(activePointers.size===1){down={x:event.clientX,y:event.clientY};moved=false;}else moved=true;});
+  renderer.domElement.addEventListener('pointermove',event=>{
+    if(down&&Math.hypot(event.clientX-down.x,event.clientY-down.y)>5)moved=true;
+    if(activePointers.size||cameraTween){tooltip.hidden=true;return;}
+    const bar=hit(event);hovered=bar?.id||null;styling();if(!bar){tooltip.hidden=true;return;}
+    tooltip.replaceChildren();const name=document.createElement('strong');name.textContent=`${bar.disk.id} ${bar.disk.name} · ${bar.category.label}`;const value=document.createElement('span');value.textContent=metric==='gb'?fmt(bar.gb)+' GB':bar.diskPercent.toFixed(2)+'%';tooltip.append(name,value);tooltip.hidden=false;
+    const rect=stage.getBoundingClientRect();lastTooltip={x:event.clientX-rect.left,y:event.clientY-rect.top};tooltip.style.left=Math.min(width-tooltip.offsetWidth-10,Math.max(10,lastTooltip.x+12))+'px';tooltip.style.top=Math.min(height-tooltip.offsetHeight-10,Math.max(10,lastTooltip.y-45))+'px';
+  });
+  renderer.domElement.addEventListener('pointerup',event=>{activePointers.delete(event.pointerId);if(!moved&&down&&activePointers.size===0&&!cameraTween){const bar=hit(event);if(bar)select(bar);}if(!activePointers.size)down=null;});
+  renderer.domElement.addEventListener('pointercancel',event=>{activePointers.delete(event.pointerId);down=null;moved=true;});renderer.domElement.addEventListener('pointerleave',()=>{tooltip.hidden=true;hovered=null;styling();});controls.addEventListener('change',()=>{dirty=true;});
+  window.addEventListener('message',event=>{if(event.source!==window.parent)return;const data=event.data;if(data?.type==='disk-heatmap:state'){query=typeof data.query==='string'?data.query:'';const nextDisk=DATA.disks.some(d=>d.id===data.activeDisk)?data.activeDisk:activeDisk;if(nextDisk!==activeDisk&&selected&&bars.find(b=>b.id===selected)?.disk.id!==nextDisk){selected=null;document.getElementById('detail').hidden=true;setView(view);}activeDisk=nextDisk;styling();}});
+  function placeLabels(){
+    for(const item of labels){const projected=item.position.clone().project(camera);const margin=item.element.offsetWidth/2+5;item.element.style.left=Math.max(margin,Math.min(width-margin,(projected.x*.5+.5)*width))+'px';item.element.style.top=Math.max(16,Math.min(height-16,(-projected.y*.5+.5)*height))+'px';item.element.style.visibility=Math.abs(projected.x)>1||Math.abs(projected.y)>1||projected.z>1||projected.z< -1?'hidden':'visible';
+      item.element.textContent=width<520?(item.type==='disk'?item.text.replace(' ',''):item.text.length===4?item.text.slice(0,2)+'\n'+item.text.slice(2):item.text):item.text;
+    }
+  }
+  function resize(){const rect=stage.getBoundingClientRect();width=Math.max(1,rect.width);height=Math.max(1,rect.height);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();if(!selected)setView(view,true);dirty=true;}
+  const observer=new ResizeObserver(resize);observer.observe(stage);updateMetric('gb',true);resize();styling();document.getElementById('stage-status').hidden=true;
+  const ease=t=>1-Math.pow(1-t,3);
+  function animate(now){
+    if(metricTween){const t=metricTween.duration?Math.min(1,(now-metricTween.start)/metricTween.duration):1;const e=ease(t);for(const entry of metricTween.values){entry.bar.group.scale.y=THREE.MathUtils.lerp(entry.fromHeight,entry.toHeight,e);entry.bar.mesh.material.color.lerpColors(entry.fromColor,entry.toColor,e);}dirty=true;if(t===1)metricTween=null;}
+    if(cameraTween){const t=cameraTween.duration?Math.min(1,(now-cameraTween.start)/cameraTween.duration):1;const e=ease(t);camera.position.lerpVectors(cameraTween.fromPosition,cameraTween.toPosition,e);controls.target.lerpVectors(cameraTween.fromTarget,cameraTween.toTarget,e);dirty=true;if(t===1){cameraTween=null;controls.enabled=true;}}
+    if(controls.update())dirty=true;
+    if(dirty){placeLabels();renderer.render(scene,camera);dirty=false;}
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+  // Read-only state supports embedding diagnostics and verifies values actually rendered by WebGL.
+  window.diskHeatmap=Object.freeze({snapshot:()=>({view,metric,selected,animating:!!(cameraTween||metricTween),camera:camera.position.toArray(),target:controls.target.toArray(),bars:bars.map(bar=>{const point=new THREE.Vector3(bar.group.position.x,bar.group.scale.y+.015,bar.group.position.z).project(camera);const rect=stage.getBoundingClientRect();return{id:bar.id,diskId:bar.disk.id,category:bar.category.label,gb:bar.gb,diskPercent:bar.diskPercent,totalPercent:bar.totalPercent,height:bar.group.scale.y,color:bar.mesh.material.color.getHexString(),screen:{x:rect.left+(point.x*.5+.5)*width,y:rect.top+(-point.y*.5+.5)*height}};})})});
+  if(window.parent!==window)window.parent.postMessage({type:'disk-heatmap:request-state'},'*');
+  window.addEventListener('pagehide',()=>{observer.disconnect();controls.dispose();geometry.dispose();edgeGeometry.dispose();bars.forEach(bar=>{bar.mesh.material.dispose();bar.edge.material.dispose();});renderer.dispose();},{once:true});
+}
+if(window.DATA_VALID)boot().catch(error=>{const status=document.getElementById('stage-status');status.hidden=false;status.classList.add('error');status.setAttribute('role','alert');status.textContent='3D 图形未能加载，请检查网络或 WebGL 支持后刷新。';window.HEATMAP_LOAD_ERROR=error.message;});
+</script>
+</body></html>

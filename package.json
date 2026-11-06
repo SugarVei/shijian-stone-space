@@ -1,0 +1,47 @@
+{
+  "name": "shijian-stone-space",
+  "version": "0.3.1",
+  "private": true,
+  "description": "石间 — 用石头看见磁盘空间",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5186 --strictPort",
+    "build": "vite build",
+    "start": "electron .",
+    "test": "node --test tests/*.test.*",
+    "package": "node scripts/prepare-desktop.cjs && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop.ps1"
+  },
+  "dependencies": {
+    "d3-polygon": "^3.0.1",
+    "d3-voronoi-map": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "40.6.1",
+    "electron-builder": "^26.0.12",
+    "vite": "^6.1.0"
+  },
+  "build": {
+    "appId": "studio.shijian.diskspace",
+    "productName": "石间",
+    "directories": {
+      "output": "release",
+      "app": ".desktop-app"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": "dir",
+      "signAndEditExecutable": false
+    },
+    "asar": true
+  }
+}
