@@ -79,7 +79,7 @@ else {
         return answer.response===1;
       },trashItem:target=>shell.trashItem(target),onChanged:async scope=>{scanWatch.close();completedScans.clear();const drive=driveFor(scope);if(drive)await scanCache.markDriveDirty(drive.root).catch(()=>{});}
     });
-    win = new BrowserWindow({ width: 1500, height: 980, minWidth: 900, minHeight: 640, title: '石间', frame: false, backgroundColor: '#ffffff', icon: path.join(__dirname, '../dist/icon.svg'), webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    win = new BrowserWindow({ width: 1500, height: 980, minWidth: 900, minHeight: 640, title: '石间', frame: false, backgroundColor: '#faf9f6', icon: path.join(__dirname, '../dist/icon.svg'), webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     win.setMenuBarVisibility(false);
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', event => event.preventDefault());

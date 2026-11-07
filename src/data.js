@@ -1,10 +1,10 @@
 export const GB = 1024 ** 3;
 export const CATEGORIES = {
-  user: { label: '用户文件', color: '#8dae85' },
-  system: { label: '系统', color: '#83a5c2' },
-  apps: { label: '应用', color: '#d6ad6a' },
-  data: { label: '系统数据', color: '#b196c7' },
-  other: { label: '其他', color: '#b5aea3' },
+  user: { label: '用户文件', color: '#93ab8c' },
+  system: { label: '系统', color: '#8ea5ba' },
+  apps: { label: '应用', color: '#d0b07e' },
+  data: { label: '系统数据', color: '#b1a2c4' },
+  other: { label: '其他', color: '#bcb5ab' },
 };
 export function formatBytes(bytes, compact = false) {
   if (!Number.isFinite(bytes)) return '—';
